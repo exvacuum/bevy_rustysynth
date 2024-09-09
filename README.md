@@ -38,8 +38,8 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            RustysynthPlugin {
-                soundfont: // Bring your own soundfont
+            RustySynthPlugin {
+                soundfont: // Bring your own soundfont or enable the "hl4mgm" feature to use a terrible 4MB default
             }
         ))
         .run();
