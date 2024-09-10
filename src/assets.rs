@@ -8,7 +8,7 @@ use bevy::{
     asset::{io::Reader, AssetLoader, AsyncReadExt, LoadContext},
     audio::Source,
     prelude::*,
-    tasks::AsyncComputeTaskPool,
+    tasks::{AsyncComputeTaskPool, Task},
 };
 use itertools::Itertools;
 use rustysynth::{MidiFile, MidiFileSequencer, SoundFont, Synthesizer, SynthesizerSettings};
@@ -47,6 +47,7 @@ impl AssetLoader for MidiAssetLoader {
 pub struct MidiDecoder {
     sample_rate: usize,
     stream: Receiver<f32>,
+    _task: Task<()>,
 }
 
 impl MidiDecoder {
@@ -58,7 +59,7 @@ impl MidiDecoder {
         let mut midi = Cursor::new(midi);
         let sample_rate = 44100_usize;
         let (tx, rx) = async_channel::bounded::<f32>(sample_rate * 2);
-        AsyncComputeTaskPool::get()
+        let task = AsyncComputeTaskPool::get()
             .spawn(async move {
                 let midi = Arc::new(MidiFile::new(&mut midi).expect("Failed to read midi file."));
                 let settings = SynthesizerSettings::new(sample_rate as i32);
@@ -78,9 +79,9 @@ impl MidiDecoder {
                     }
                 }
                 tx.close();
-            })
-            .detach();
+            });
         Self {
+            _task: task,
             sample_rate,
             stream: rx,
         }
