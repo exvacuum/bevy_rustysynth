@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use async_channel::{Receiver, TryRecvError};
+use async_channel::{Receiver, SendError, TryRecvError, TrySendError};
 use bevy::{
     asset::{io::Reader, AssetLoader, AsyncReadExt, LoadContext},
     audio::Source,
@@ -77,8 +77,8 @@ impl MidiDecoder {
                 while !sequencer.end_of_sequence() {
                     sequencer.render(&mut left, &mut right);
                     for value in left.iter().interleave(right.iter()) {
-                        if let Err(e) = tx.send(*value).await {
-                            error!("{e}");
+                        if let Err(_) = tx.send(*value).await {
+                            return;
                         };
                     }
                 }
