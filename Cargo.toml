@@ -14,7 +14,7 @@ rodio = "0.19"
 [dependencies.bevy]
 version = "0.14"
 default-features = false
-features = ["bevy_audio", "bevy_asset"]
+features = ["bevy_audio", "bevy_asset", "multi_threaded"]
 
 [features]
 default = ["hl4mgm"]
