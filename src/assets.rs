@@ -41,6 +41,10 @@ impl AssetLoader for MidiAssetLoader {
         reader.read_to_end(&mut bytes).await?;
         Ok(MidiAudio { midi: bytes })
     }
+
+    fn extensions(&self) -> &[&str] {
+        &["mid", "midi"]
+    }
 }
 
 /// Decoder for MIDI file playback
