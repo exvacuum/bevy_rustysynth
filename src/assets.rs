@@ -21,6 +21,8 @@ pub struct MidiNote {
     pub channel: i32,
     /// Preset (instrument) to play the note with (see GM spec.)
     pub preset: i32,
+    /// Bank to play note with
+    pub bank: i32,
     /// Key to play (60 is middle C)
     pub key: i32,
     /// Velocity to play note at
@@ -34,6 +36,7 @@ impl Default for MidiNote {
         Self {
             channel: 0,
             preset: 0,
+            bank: 0,
             key: 60,
             velocity: 100,
             duration: Duration::from_secs(1),
@@ -91,56 +94,64 @@ impl MidiFileDecoder {
     pub fn new(midi: MidiAudio, soundfont: Arc<SoundFont>) -> Self {
         let sample_rate = 44100_usize;
         let (tx, rx) = async_channel::bounded::<f32>(sample_rate * 2);
-        AsyncComputeTaskPool::get().spawn(async move {
-            let settings = SynthesizerSettings::new(sample_rate as i32);
-            let mut synthesizer =
-                Synthesizer::new(&soundfont, &settings).expect("Failed to create synthesizer.");
+        AsyncComputeTaskPool::get()
+            .spawn(async move {
+                let settings = SynthesizerSettings::new(sample_rate as i32);
+                let mut synthesizer =
+                    Synthesizer::new(&soundfont, &settings).expect("Failed to create synthesizer.");
 
-            match midi {
-                MidiAudio::File(midi_data) => {
-                    let mut sequencer = MidiFileSequencer::new(synthesizer);
-                    let mut midi_data = Cursor::new(midi_data);
-                    let midi =
-                        Arc::new(MidiFile::new(&mut midi_data).expect("Failed to read midi file."));
-                    sequencer.play(&midi, false);
-                    let mut left: Vec<f32> = vec![0_f32; sample_rate];
-                    let mut right: Vec<f32> = vec![0_f32; sample_rate];
-                    while !sequencer.end_of_sequence() {
-                        sequencer.render(&mut left, &mut right);
-                        for value in left.iter().interleave(right.iter()) {
-                            if let Err(_) = tx.send(*value).await {
-                                return;
-                            };
+                match midi {
+                    MidiAudio::File(midi_data) => {
+                        let mut sequencer = MidiFileSequencer::new(synthesizer);
+                        let mut midi_data = Cursor::new(midi_data);
+                        let midi = Arc::new(
+                            MidiFile::new(&mut midi_data).expect("Failed to read midi file."),
+                        );
+                        sequencer.play(&midi, false);
+                        let mut left: Vec<f32> = vec![0_f32; sample_rate];
+                        let mut right: Vec<f32> = vec![0_f32; sample_rate];
+                        while !sequencer.end_of_sequence() {
+                            sequencer.render(&mut left, &mut right);
+                            for value in left.iter().interleave(right.iter()) {
+                                if let Err(_) = tx.send(*value).await {
+                                    return;
+                                };
+                            }
+                        }
+                    }
+                    MidiAudio::Sequence(sequence) => {
+                        for MidiNote {
+                            channel,
+                            preset,
+                            bank,
+                            key,
+                            velocity,
+                            duration,
+                        } in sequence.iter()
+                        {
+                            synthesizer.process_midi_message(*channel, 0xB0, 0x00, *bank);
+                            synthesizer.process_midi_message(*channel, 0xC0, *preset, 0);
+                            synthesizer.note_on(*channel, *key, *velocity);
+                            let note_length =
+                                (sample_rate as f32 * duration.as_secs_f32()) as usize;
+                            let mut left: Vec<f32> = vec![0_f32; note_length];
+                            let mut right: Vec<f32> = vec![0_f32; note_length];
+                            for (left, right) in left.chunks_mut(sample_rate).zip(right.chunks_mut(sample_rate)) {
+                                synthesizer.render(left, right);
+                                for value in left.iter().interleave(right.iter()) {
+                                    if let Err(_) = tx.send(*value).await {
+                                        return;
+                                    };
+                                }
+                            }
+                            synthesizer.note_off(*channel, *key);
                         }
                     }
                 }
-                MidiAudio::Sequence(sequence) => {
-                    for MidiNote {
-                        channel,
-                        preset,
-                        key,
-                        velocity,
-                        duration,
-                    } in sequence.iter()
-                    {
-                        synthesizer.process_midi_message(*channel, 0b1100_0000, *preset, 0);
-                        synthesizer.note_on(*channel, *key, *velocity);
-                        let note_length = (sample_rate as f32 * duration.as_secs_f32()) as usize;
-                        let mut left: Vec<f32> = vec![0_f32; note_length];
-                        let mut right: Vec<f32> = vec![0_f32; note_length];
-                        synthesizer.render(&mut left, &mut right);
-                        for value in left.iter().interleave(right.iter()) {
-                            if let Err(_) = tx.send(*value).await {
-                                return;
-                            };
-                        }
-                        synthesizer.note_off(*channel, *key);
-                    }
-                }
-            }
 
-            tx.close();
-        }).detach();
+                tx.close();
+            })
+            .detach();
         Self {
             sample_rate,
             stream: rx,

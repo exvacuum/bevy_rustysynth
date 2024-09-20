@@ -1,7 +1,7 @@
 [package]
 name = "bevy_rustysynth"
 description = "A plugin which adds MIDI file and soundfont audio support to the bevy engine via rustysynth."
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "0BSD OR MIT OR Apache-2.0"
 
