@@ -11,14 +11,14 @@ A plugin which adds MIDI file and soundfont audio support to the bevy engine via
 
 | Crate Version | Bevy Version |
 |---            |---           |
-| 0.1           | 0.14         |
+| 0.1-0.2       | 0.14         |
 
 ## Installation
 
 ### crates.io
 ```toml
 [dependencies]
-bevy_rustysynth = "0.1"
+bevy_rustysynth = "0.2"
 ```
 
 ### Using git URL in Cargo.toml
